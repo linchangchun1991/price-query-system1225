@@ -4,10 +4,17 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // Explicitly set the root to the current directory to avoid /src lookup issues
+  // Critical: Set root to current directory to support flat structure
   root: '.',
+  // Resolve alias to ensure imports work smoothly
+  resolve: {
+    alias: {
+      '@': '.',
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    sourcemap: false,
   }
 });
