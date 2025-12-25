@@ -54,15 +54,18 @@
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
   }
 }
 </script>
 </head>
   <body class="text-slate-900 antialiased selection:bg-ivy-navy selection:text-white">
     <div id="root"></div>
+    <!-- 关键修复：连接到 React 入口文件 -->
+    <!-- 注意：请确保你的入口文件位于 src 目录下且名为 index.tsx。如果你的 Vite 项目默认生成的是 main.tsx，请修改为 /src/main.tsx -->
+    <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>
