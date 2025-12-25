@@ -6,8 +6,9 @@ import { Button } from './components/Button';
 import { AdminModal } from './components/AdminModal';
 import { 
   Search, ShieldCheck, Sparkles, LogOut, Plus, Globe2, UserCircle, 
-  Filter, XCircle, GraduationCap, ChevronDown, MapPin, Briefcase, 
-  School, Building, LayoutTemplate, SlidersHorizontal, BarChart3, Settings 
+  XCircle, GraduationCap, ChevronDown, MapPin, Briefcase, 
+  School, LayoutTemplate, SlidersHorizontal, BarChart3, Settings,
+  CheckSquare, Trash2, Tag
 } from 'lucide-react';
 
 // Admin Email Constant
@@ -94,7 +95,7 @@ const ProSelect = ({
   options: string[], 
   placeholder: string 
 }) => (
-  <div className="relative min-w-[160px] group">
+  <div className="relative min-w-[140px] group">
     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-hover:text-ivy-navy transition-colors">
        <Icon size={16} />
     </div>
@@ -112,6 +113,20 @@ const ProSelect = ({
   </div>
 );
 
+// --- Quick Filter Chip Component ---
+const FilterChip: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+      active 
+        ? 'bg-ivy-navy text-white border-ivy-navy shadow-md shadow-ivy-navy/20' 
+        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+    }`}
+  >
+    {label}
+  </button>
+);
+
 // --- Main App Component ---
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -124,6 +139,10 @@ export default function App() {
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [selectedDept, setSelectedDept] = useState<string>(''); // Delivery Dept Filter
   
+  // Admin Batch Action State
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -149,6 +168,8 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     resetAllFilters();
+    setIsSelectionMode(false);
+    setSelectedProductIds(new Set());
   };
 
   // --- Data Management Logic ---
@@ -158,6 +179,37 @@ export default function App() {
 
   const handleDeleteProduct = (id: string) => {
     setProducts(prev => prev.filter(p => p.id !== id));
+    if (selectedProductIds.has(id)) {
+      const newSet = new Set(selectedProductIds);
+      newSet.delete(id);
+      setSelectedProductIds(newSet);
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (confirm(`确定要删除选中的 ${selectedProductIds.size} 个项目吗？`)) {
+      setProducts(prev => prev.filter(p => !selectedProductIds.has(p.id)));
+      setSelectedProductIds(new Set());
+      setIsSelectionMode(false);
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    const newSet = new Set(selectedProductIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedProductIds(newSet);
+  };
+
+  const handleSelectAll = (currentFilteredProducts: Product[]) => {
+    if (selectedProductIds.size === currentFilteredProducts.length && currentFilteredProducts.length > 0) {
+      setSelectedProductIds(new Set());
+    } else {
+      setSelectedProductIds(new Set(currentFilteredProducts.map(p => p.id)));
+    }
   };
 
   const resetAllFilters = () => {
@@ -177,6 +229,7 @@ export default function App() {
     availableDepts 
   } = useMemo(() => {
     const lowerQuery = query.toLowerCase().trim();
+    const searchTokens = lowerQuery.split(/\s+/).filter(token => token.length > 0);
     
     // Extract Filters unique values from current dataset
     const industries = Array.from(new Set(products.map(p => p.industry))).filter(Boolean).sort();
@@ -185,16 +238,16 @@ export default function App() {
 
     // Filter Logic
     let filtered = products.filter(p => {
-      // 1. Universal Search (Case insensitive, checks everything)
-      const matchesSearch = !lowerQuery ? true : (
-        p.name.toLowerCase().includes(lowerQuery) ||
-        p.industry.toLowerCase().includes(lowerQuery) ||
-        p.role.toLowerCase().includes(lowerQuery) ||
-        p.type.toLowerCase().includes(lowerQuery) ||
-        p.format.toLowerCase().includes(lowerQuery) ||
-        p.location.toLowerCase().includes(lowerQuery) ||
-        p.delivery_dept.toLowerCase().includes(lowerQuery) ||
-        p.id.toLowerCase().includes(lowerQuery)
+      // 1. Enhanced Search Logic (Token based AND logic)
+      const matchesSearch = searchTokens.length === 0 || searchTokens.every(token => 
+        p.name.toLowerCase().includes(token) ||
+        p.industry.toLowerCase().includes(token) ||
+        p.role.toLowerCase().includes(token) ||
+        p.type.toLowerCase().includes(token) ||
+        p.format.toLowerCase().includes(token) ||
+        p.location.toLowerCase().includes(token) ||
+        p.delivery_dept.toLowerCase().includes(token) ||
+        p.id.toLowerCase().includes(token)
       );
       
       // 2. Specific Filters
@@ -277,16 +330,25 @@ export default function App() {
     setIsAiModalOpen(false);
   };
 
+  // Helper for quick query setting
+  const toggleQueryTag = (tag: string) => {
+    if (query.includes(tag)) {
+      setQuery(query.replace(tag, '').trim());
+    } else {
+      setQuery(`${query} ${tag}`.trim());
+    }
+  };
+
   if (!user) return <LoginView onLogin={handleLogin} error={authError} />;
 
   const activeFiltersCount = [selectedIndustry, selectedLocation, selectedDept, query, aiReason].filter(Boolean).length;
   const isAdmin = user.role === 'admin';
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-900">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-900 pb-20">
       
       {/* Top Navbar */}
-      <nav className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
+      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/80 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
         <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
              <div className="bg-ivy-navy text-white p-1.5 rounded-lg">
@@ -328,14 +390,26 @@ export default function App() {
                  <Sparkles size={16} className="mr-2 text-indigo-600" /> AI 选岗助手
                </Button>
                {isAdmin && (
-                 <Button onClick={() => setIsModalOpen(true)} className="pl-3 pr-4 shadow-lg shadow-ivy-navy/20">
-                   <Plus size={18} className="mr-1" /> 导入数据
-                 </Button>
+                 <>
+                   <Button 
+                      onClick={() => {
+                        setIsSelectionMode(!isSelectionMode);
+                        setSelectedProductIds(new Set());
+                      }} 
+                      variant={isSelectionMode ? 'secondary' : 'secondary'}
+                      className={`transition-colors ${isSelectionMode ? 'bg-slate-200 border-slate-300' : ''}`}
+                   >
+                     <CheckSquare size={18} className="mr-2" /> {isSelectionMode ? '退出批量管理' : '批量管理'}
+                   </Button>
+                   <Button onClick={() => setIsModalOpen(true)} className="pl-3 pr-4 shadow-lg shadow-ivy-navy/20">
+                     <Plus size={18} className="mr-1" /> 导入数据
+                   </Button>
+                 </>
                )}
              </div>
           </div>
 
-          {/* SaaS Style Filter Toolbar */}
+          {/* Filter Toolbar */}
           <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-2">
              {/* Search */}
              <div className="relative flex-1 min-w-[300px]">
@@ -345,7 +419,7 @@ export default function App() {
                <input
                  type="text"
                  className="block w-full pl-10 pr-4 py-2.5 bg-slate-50 border-0 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-ivy-navy/10 focus:bg-white transition-all"
-                 placeholder="搜索产品名称、ID、地点或关键词..."
+                 placeholder="支持多关键词搜索，如：上海 金融 PTA..."
                  value={query}
                  onChange={(e) => setQuery(e.target.value)}
                />
@@ -392,7 +466,46 @@ export default function App() {
                )}
              </div>
           </div>
+          
+          {/* Quick Filter Chips (UX Improvement) */}
+          <div className="flex flex-wrap gap-2 items-center px-1">
+             <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1 flex items-center gap-1">
+               <Tag size={12} /> 快速筛选:
+             </span>
+             {['远程', '实地', '走人事', '走项目', 'PTA', '投行'].map(tag => (
+               <FilterChip 
+                 key={tag} 
+                 label={tag} 
+                 active={query.includes(tag)} 
+                 onClick={() => toggleQueryTag(tag)} 
+               />
+             ))}
+          </div>
         </div>
+
+        {/* Admin Batch Actions Bar (Visible when Selection Mode is ON) */}
+        {isSelectionMode && isAdmin && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white shadow-2xl border border-slate-200 rounded-full px-6 py-3 flex items-center gap-4 animate-in slide-in-from-bottom-5">
+             <div className="text-sm font-medium text-slate-700 border-r border-slate-200 pr-4">
+               已选中 <span className="font-bold text-ivy-navy">{selectedProductIds.size}</span> 个项目
+             </div>
+             <button 
+               onClick={() => handleSelectAll(filteredProducts)}
+               className="text-sm font-medium text-slate-600 hover:text-ivy-navy transition-colors"
+             >
+               {selectedProductIds.size === filteredProducts.length && filteredProducts.length > 0 ? '取消全选' : '全选当前页'}
+             </button>
+             <Button 
+               size="sm" 
+               variant="danger" 
+               disabled={selectedProductIds.size === 0}
+               onClick={handleBatchDelete}
+               className="ml-2 rounded-full px-5"
+             >
+               <Trash2 size={14} className="mr-2" /> 批量删除
+             </Button>
+          </div>
+        )}
 
         {/* AI Insight Panel */}
         {aiReason && (
@@ -417,7 +530,12 @@ export default function App() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {aiRecommendations.map(product => (
-                <ProductCard key={`ai-${product.id}`} product={product} isRecommended={true} />
+                <ProductCard 
+                  key={`ai-${product.id}`} 
+                  product={product} 
+                  isRecommended={true} 
+                  // Recommendations cannot be batch deleted to avoid accidents
+                />
               ))}
             </div>
           </div>
@@ -448,6 +566,9 @@ export default function App() {
                 key={product.id} 
                 product={product} 
                 onDelete={isAdmin ? handleDeleteProduct : undefined}
+                selectionMode={isSelectionMode}
+                isSelected={selectedProductIds.has(product.id)}
+                onToggleSelect={handleToggleSelect}
               />
             ))
           ) : (
