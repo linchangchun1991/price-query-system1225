@@ -6,14 +6,9 @@ export default defineConfig({
   // Ensure Vite looks for files in the current directory (flat structure)
   root: '.', 
   // Base path for asset URLs
-  base: '/',
+  base: './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        main: '/index.html',
-      },
-    },
   }
 });
