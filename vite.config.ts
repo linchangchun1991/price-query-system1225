@@ -3,10 +3,17 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  root: '.',
-  base: './',
+  // Ensure Vite looks for files in the current directory (flat structure)
+  root: '.', 
+  // Base path for asset URLs
+  base: '/',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: '/index.html',
+      },
+    },
   }
 });
