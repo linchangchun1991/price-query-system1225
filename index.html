@@ -55,7 +55,7 @@
 </head>
   <body class="text-slate-900 antialiased selection:bg-ivy-navy selection:text-white">
     <div id="root"></div>
-    <!-- CRITICAL FIX: Use relative path ./index.tsx and verify no /src/ prefix exists -->
-    <script type="module" src="./index.tsx"></script>
+    <!-- FIX: Removed importmap, changed path to /index.tsx to force root resolution -->
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
