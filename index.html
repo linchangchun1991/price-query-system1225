@@ -17,10 +17,10 @@
             },
             colors: {
               ivy: {
-                navy: '#0f172a', // Deep academic blue
-                red: '#991b1b',  // Stanford-esque cardinal red
-                cream: '#f8fafc', // Paper white
-                gold: '#b4975a', // Premium gold accent
+                navy: '#0f172a',
+                red: '#991b1b',
+                cream: '#f8fafc',
+                gold: '#b4975a',
               }
             },
             boxShadow: {
@@ -64,10 +64,6 @@
 </head>
   <body class="text-slate-900 antialiased selection:bg-ivy-navy selection:text-white">
     <div id="root"></div>
-    <!-- 关键修复：
-         1. 移除了 importmap，防止与 Vite 构建冲突。
-         2. 将路径修改为 "/index.tsx" (去掉 /src 前缀)，因为文件位于根目录。 
-    -->
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
