@@ -1,8 +1,7 @@
 import { Product } from './types';
 
-// TODO: 请替换为你自己的 Cloudflare Worker 地址
-// 例如: "https://price-api.yourname.workers.dev"
-export const API_BASE_URL = "https://price-api.linchangchun.workers.dev"; 
+// 根据你的截图，这是你的 Worker 地址
+export const API_BASE_URL = "https://pricedb.jason-linchangchun.workers.dev"; 
 
 // Domain restriction configuration
 export const ALLOWED_DOMAIN = "@highmark.com.cn";

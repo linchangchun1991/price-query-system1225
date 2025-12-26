@@ -189,8 +189,7 @@ export default function App() {
       setProducts(data);
     } catch (err) {
       console.error(err);
-      setDataError('无法连接到数据库，请检查网络或联系管理员。');
-      // Optional: Fallback to empty or local cache if needed
+      setDataError('无法连接到数据库 (D1)，请确认 Worker 配置已部署。');
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +204,7 @@ export default function App() {
 
   // 2. Add Products
   const handleAddProducts = async (newItems: Product[]) => {
-    // Optimistic UI update (optional, but let's stick to simple refresh for safety)
+    // Optimistic UI update
     const originalProducts = [...products];
     setProducts(prev => [...newItems, ...prev]); // Show immediately
     
@@ -220,7 +219,7 @@ export default function App() {
       
       // Refresh to ensure sync with server format
       await fetchProducts(); 
-      alert(`成功上传 ${newItems.length} 个产品`);
+      alert(`成功上传 ${newItems.length} 个产品到云端数据库`);
     } catch (err) {
       console.error(err);
       alert('上传失败，请重试。');
