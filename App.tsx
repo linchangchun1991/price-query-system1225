@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { User, Product } from './types';
-import { INITIAL_DATA, ALLOWED_DOMAIN, INDUSTRY_KEYWORDS, MAJOR_MAP, TARGET_SCHOOL_KEYWORDS } from './constants';
+import { ALLOWED_DOMAIN, INDUSTRY_KEYWORDS, MAJOR_MAP, TARGET_SCHOOL_KEYWORDS, API_BASE_URL } from './constants';
 import { ProductCard } from './components/ProductCard';
 import { Button } from './components/Button';
 import { AdminModal } from './components/AdminModal';
@@ -8,7 +8,7 @@ import {
   Search, ShieldCheck, Sparkles, LogOut, Plus, Globe2, UserCircle, 
   XCircle, GraduationCap, ChevronDown, MapPin, Briefcase, 
   School, LayoutTemplate, SlidersHorizontal, BarChart3, Settings,
-  CheckSquare, Trash2, Tag
+  CheckSquare, Trash2, Tag, Loader2, RefreshCw
 } from 'lucide-react';
 
 // Admin Email Constant
@@ -81,7 +81,7 @@ const LoginView: React.FC<{ onLogin: (email: string) => void, error: string | nu
   );
 };
 
-// --- Custom Select Component for "Pro" feel ---
+// --- Custom Select Component ---
 const ProSelect = ({ 
   icon: Icon, 
   value, 
@@ -131,13 +131,17 @@ const FilterChip: React.FC<{ label: string; active: boolean; onClick: () => void
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [products, setProducts] = useState<Product[]>(INITIAL_DATA);
+  
+  // Data State
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
   
   // Search & Filter State
   const [query, setQuery] = useState('');
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
-  const [selectedDept, setSelectedDept] = useState<string>(''); // Delivery Dept Filter
+  const [selectedDept, setSelectedDept] = useState<string>('');
   
   // Admin Batch Action State
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -158,7 +162,7 @@ export default function App() {
       setUser({ email, role: 'admin' });
       setAuthError(null);
     } else if (email.endsWith(ALLOWED_DOMAIN)) {
-      setUser({ email, role: 'viewer' }); // Regular employees are viewers
+      setUser({ email, role: 'viewer' });
       setAuthError(null);
     } else {
       setAuthError(`访问被拒绝。请使用公司后缀 (${ALLOWED_DOMAIN}) 的邮箱。`);
@@ -172,25 +176,106 @@ export default function App() {
     setSelectedProductIds(new Set());
   };
 
-  // --- Data Management Logic ---
-  const handleAddProducts = (newItems: Product[]) => {
-    setProducts(prev => [...newItems, ...prev]);
+  // --- API Integration Logic ---
+  
+  // 1. Fetch Data
+  const fetchProducts = async () => {
+    setIsLoading(true);
+    setDataError(null);
+    try {
+      const response = await fetch(API_BASE_URL);
+      if (!response.ok) throw new Error('Failed to fetch data');
+      const data = await response.json();
+      setProducts(data);
+    } catch (err) {
+      console.error(err);
+      setDataError('无法连接到数据库，请检查网络或联系管理员。');
+      // Optional: Fallback to empty or local cache if needed
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDeleteProduct = (id: string) => {
+  // Fetch on mount
+  useEffect(() => {
+    if (user) {
+      fetchProducts();
+    }
+  }, [user]);
+
+  // 2. Add Products
+  const handleAddProducts = async (newItems: Product[]) => {
+    // Optimistic UI update (optional, but let's stick to simple refresh for safety)
+    const originalProducts = [...products];
+    setProducts(prev => [...newItems, ...prev]); // Show immediately
+    
+    try {
+      const response = await fetch(API_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItems)
+      });
+      
+      if (!response.ok) throw new Error('Upload failed');
+      
+      // Refresh to ensure sync with server format
+      await fetchProducts(); 
+      alert(`成功上传 ${newItems.length} 个产品`);
+    } catch (err) {
+      console.error(err);
+      alert('上传失败，请重试。');
+      setProducts(originalProducts); // Rollback
+    }
+  };
+
+  // 3. Single Delete
+  const handleDeleteProduct = async (id: string) => {
+    // Optimistic update
+    const originalProducts = [...products];
     setProducts(prev => prev.filter(p => p.id !== id));
     if (selectedProductIds.has(id)) {
       const newSet = new Set(selectedProductIds);
       newSet.delete(id);
       setSelectedProductIds(newSet);
     }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}?id=${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Delete failed');
+    } catch (err) {
+      console.error(err);
+      alert('删除失败，数据已恢复');
+      setProducts(originalProducts); // Rollback
+    }
   };
 
-  const handleBatchDelete = () => {
+  // 4. Batch Delete
+  const handleBatchDelete = async () => {
     if (confirm(`确定要删除选中的 ${selectedProductIds.size} 个项目吗？`)) {
+      const idsToDelete = Array.from(selectedProductIds);
+      const originalProducts = [...products];
+      
+      // Optimistic Update
       setProducts(prev => prev.filter(p => !selectedProductIds.has(p.id)));
       setSelectedProductIds(new Set());
       setIsSelectionMode(false);
+
+      try {
+        const response = await fetch(API_BASE_URL, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: idsToDelete })
+        });
+        
+        if (!response.ok) throw new Error('Batch delete failed');
+        await fetchProducts(); // Sync
+      } catch (err) {
+        console.error(err);
+        alert('批量删除失败，请重试');
+        setProducts(originalProducts); // Rollback
+      }
     }
   };
 
@@ -238,7 +323,6 @@ export default function App() {
 
     // Filter Logic
     let filtered = products.filter(p => {
-      // 1. Enhanced Search Logic (Token based AND logic)
       const matchesSearch = searchTokens.length === 0 || searchTokens.every(token => 
         p.name.toLowerCase().includes(token) ||
         p.industry.toLowerCase().includes(token) ||
@@ -250,7 +334,6 @@ export default function App() {
         p.id.toLowerCase().includes(token)
       );
       
-      // 2. Specific Filters
       const matchesIndustry = selectedIndustry ? p.industry === selectedIndustry : true;
       const matchesLocation = selectedLocation ? p.location.includes(selectedLocation) : true;
       const matchesDept = selectedDept ? p.delivery_dept === selectedDept : true;
@@ -258,7 +341,7 @@ export default function App() {
       return matchesSearch && matchesIndustry && matchesLocation && matchesDept;
     });
 
-    // 3. AI Recommendation Logic
+    // AI Recommendation Logic
     let recs: Product[] = [];
     if (lowerQuery.length > 1) {
       let targetIndustry: string | null = null;
@@ -330,7 +413,6 @@ export default function App() {
     setIsAiModalOpen(false);
   };
 
-  // Helper for quick query setting
   const toggleQueryTag = (tag: string) => {
     if (query.includes(tag)) {
       setQuery(query.replace(tag, '').trim());
@@ -383,7 +465,10 @@ export default function App() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
              <div>
                <h1 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">资源管理看板</h1>
-               <p className="text-slate-500">实时掌握全球实习、科研及背景提升项目的价格与库存动态</p>
+               <div className="flex items-center gap-2">
+                 <p className="text-slate-500">实时掌握全球实习、科研及背景提升项目的价格与库存动态</p>
+                 {isLoading && <Loader2 className="animate-spin text-slate-400" size={14} />}
+               </div>
              </div>
              <div className="flex items-center gap-3">
                <Button onClick={() => setIsAiModalOpen(true)} variant="glass" className="shadow-sm">
@@ -467,7 +552,7 @@ export default function App() {
              </div>
           </div>
           
-          {/* Quick Filter Chips (UX Improvement) */}
+          {/* Quick Filter Chips */}
           <div className="flex flex-wrap gap-2 items-center px-1">
              <span className="text-xs font-bold text-slate-400 uppercase tracking-wide mr-1 flex items-center gap-1">
                <Tag size={12} /> 快速筛选:
@@ -483,7 +568,18 @@ export default function App() {
           </div>
         </div>
 
-        {/* Admin Batch Actions Bar (Visible when Selection Mode is ON) */}
+        {/* Data Error Banner */}
+        {dataError && (
+          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-100 flex items-center gap-3 text-red-700">
+            <ShieldCheck size={20} />
+            <div className="flex-1 text-sm font-medium">{dataError}</div>
+            <Button variant="secondary" size="sm" onClick={fetchProducts} className="bg-white">
+              <RefreshCw size={14} className="mr-2" /> 重试
+            </Button>
+          </div>
+        )}
+
+        {/* Admin Batch Actions Bar */}
         {isSelectionMode && isAdmin && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white shadow-2xl border border-slate-200 rounded-full px-6 py-3 flex items-center gap-4 animate-in slide-in-from-bottom-5">
              <div className="text-sm font-medium text-slate-700 border-r border-slate-200 pr-4">
@@ -522,45 +618,32 @@ export default function App() {
            </div>
         )}
 
-        {/* Recommendations */}
-        {aiRecommendations.length > 0 && (
-          <div className="mb-10">
-            <div className="flex items-center gap-2 mb-4 text-slate-400 text-xs font-bold uppercase tracking-wider">
-               <Sparkles size={12} className="text-indigo-500" /> AI 智能推荐 (根据当前搜索意图)
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {aiRecommendations.map(product => (
-                <ProductCard 
-                  key={`ai-${product.id}`} 
-                  product={product} 
-                  isRecommended={true} 
-                  // Recommendations cannot be batch deleted to avoid accidents
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Results Stats */}
         <div className="flex items-center justify-between mb-4">
            <div className="flex items-center gap-2">
              <span className="text-sm font-semibold text-slate-700">共找到 {filteredProducts.length} 个项目</span>
              <span className="w-1 h-1 rounded-full bg-slate-300" />
-             <span className="text-xs text-slate-500">数据实时同步中</span>
+             <span className="text-xs text-slate-500">
+               {isLoading ? '正在同步数据...' : '数据已更新'}
+             </span>
            </div>
            
-           {/* Simple average price stat for "Pro" feel */}
            {filteredProducts.length > 0 && (
              <div className="hidden md:flex items-center gap-2 text-xs text-slate-500">
                <BarChart3 size={14} />
-               <span>当前列表均价: {new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 0 }).format(filteredProducts.reduce((acc, curr) => acc + curr.price_floor, 0) / filteredProducts.length)}</span>
+               <span>列表均价: {new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 0 }).format(filteredProducts.reduce((acc, curr) => acc + curr.price_floor, 0) / filteredProducts.length)}</span>
              </div>
            )}
         </div>
 
         {/* Product Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5 pb-20">
-          {filteredProducts.length > 0 ? (
+          {isLoading && products.length === 0 ? (
+             // Loading Skeleton
+             Array.from({ length: 8 }).map((_, i) => (
+               <div key={i} className="h-64 bg-slate-100 rounded-xl animate-pulse" />
+             ))
+          ) : filteredProducts.length > 0 ? (
             filteredProducts.map(product => (
               <ProductCard 
                 key={product.id} 
@@ -578,7 +661,7 @@ export default function App() {
               </div>
               <h3 className="text-lg font-bold text-slate-900">未找到相关资源</h3>
               <p className="text-slate-500 text-sm mt-1 max-w-xs mx-auto">
-                请尝试调整搜索关键词或筛选条件
+                {products.length === 0 && !isLoading ? "数据库暂时为空，请点击右上角导入数据" : "请尝试调整搜索关键词或筛选条件"}
               </p>
               <Button variant="secondary" onClick={resetAllFilters} className="mt-6">
                 清除所有筛选
@@ -597,7 +680,7 @@ export default function App() {
         />
       )}
 
-      {/* AI Match Modal */}
+      {/* AI Match Modal (保持不变) */}
       {isAiModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
