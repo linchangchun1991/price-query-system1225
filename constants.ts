@@ -1,7 +1,8 @@
 import { Product } from './types';
 
-// 根据你的截图，这是你的 Worker 地址
-export const API_BASE_URL = "https://pricedb.jason-linchangchun.workers.dev"; 
+// 修改为相对路径，自动指向同域名的 /api/products
+// Cloudflare Pages Functions 会自动接管 /api 路由
+export const API_BASE_URL = "/api/products"; 
 
 // Domain restriction configuration
 export const ALLOWED_DOMAIN = "@highmark.com.cn";
