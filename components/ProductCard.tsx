@@ -1,11 +1,12 @@
 import React from 'react';
 import { Product } from '../types';
-import { MapPin, Clock, Briefcase, Sparkles, User, MonitorSmartphone, Trash2, Check, Copy } from 'lucide-react';
+import { MapPin, Clock, Briefcase, Sparkles, User, MonitorSmartphone, Trash2, Check, Copy, Pencil } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
   isRecommended?: boolean;
   onDelete?: (id: string) => void;
+  onEdit?: (product: Product) => void;
   // Batch Selection Props
   selectionMode?: boolean;
   isSelected?: boolean;
@@ -16,6 +17,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   product, 
   isRecommended = false, 
   onDelete,
+  onEdit,
   selectionMode = false,
   isSelected = false,
   onToggleSelect
@@ -63,27 +65,43 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
       )}
 
-      {/* Admin Delete Action (Single) - Only show if NOT in selection mode to avoid conflict */}
-      {onDelete && !selectionMode && (
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            if(confirm(`确定要删除产品 "${product.name}" 吗？`)) {
-              onDelete(product.id);
-            }
-          }}
-          className="absolute top-2 right-2 z-20 p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
-          title="删除产品"
-        >
-          <Trash2 size={16} />
-        </button>
+      {/* Admin Actions (Delete & Edit) - Only show if NOT in selection mode */}
+      {!selectionMode && (
+        <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+           {onEdit && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(product);
+              }}
+              className="p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-ivy-navy hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 shadow-sm"
+              title="编辑产品"
+            >
+              <Pencil size={16} />
+            </button>
+           )}
+           {onDelete && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                if(confirm(`确定要删除产品 "${product.name}" 吗？`)) {
+                  onDelete(product.id);
+                }
+              }}
+              className="p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 shadow-sm"
+              title="删除产品"
+            >
+              <Trash2 size={16} />
+            </button>
+           )}
+        </div>
       )}
 
-      {/* UX: Copy Button */}
-      {!selectionMode && (
+      {/* UX: Copy Button (Show only when not admin mode or specialized) */}
+      {!selectionMode && !onEdit && !onDelete && (
         <button 
           onClick={handleCopy}
-          className="absolute top-2 right-10 z-20 p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-transparent hover:border-indigo-100 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+          className="absolute top-2 right-2 z-20 p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-transparent hover:border-indigo-100 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
           title="复制项目信息"
         >
           {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
@@ -100,8 +118,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       
       <div className="p-5 flex flex-col h-full">
         {/* Header: Tags */}
-        <div className={`flex items-start justify-between mb-3 ${selectionMode ? 'pl-6' : ''}`}>
-          <div className="flex items-center gap-2">
+        <div className={`flex items-start justify-between mb-3 ${selectionMode ? 'pl-6' : ''} ${!selectionMode && (onEdit || onDelete) ? 'pr-16' : ''}`}>
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`
               text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-full border
               ${product.type.includes("VIP") 
@@ -115,7 +133,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </span>
           </div>
           {hasDiscount && (
-             <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
+             <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 shrink-0">
                -{discount}%
              </span>
           )}

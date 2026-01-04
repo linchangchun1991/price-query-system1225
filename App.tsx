@@ -1,18 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, Product } from './types';
-import { ALLOWED_DOMAIN, INDUSTRY_KEYWORDS, MAJOR_MAP, TARGET_SCHOOL_KEYWORDS, API_BASE_URL } from './constants';
+import { ALLOWED_DOMAIN, INDUSTRY_KEYWORDS, MAJOR_MAP, TARGET_SCHOOL_KEYWORDS, API_BASE_URL, INITIAL_DATA } from './constants';
 import { ProductCard } from './components/ProductCard';
 import { Button } from './components/Button';
 import { AdminModal } from './components/AdminModal';
+import { EditModal } from './components/EditModal';
 import { 
   Search, ShieldCheck, Sparkles, LogOut, Plus, Globe2, UserCircle, 
   XCircle, GraduationCap, ChevronDown, MapPin, Briefcase, 
-  School, LayoutTemplate, SlidersHorizontal, BarChart3, Settings,
-  CheckSquare, Trash2, Tag, Loader2, RefreshCw
+  LayoutTemplate, SlidersHorizontal, BarChart3, Settings,
+  CheckSquare, Trash2, Tag, Loader2, RefreshCw, WifiOff, Cloud, School, Pencil
 } from 'lucide-react';
 
 // Admin Email Constant
 const ADMIN_EMAIL = "liuqian@highmark.com.cn";
+const LOCAL_STORAGE_KEY = "pricepulse_products";
 
 // --- Login View Component ---
 const LoginView: React.FC<{ onLogin: (email: string) => void, error: string | null }> = ({ onLogin, error }) => {
@@ -135,6 +137,7 @@ export default function App() {
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'cloud' | 'local'>('cloud');
   const [dataError, setDataError] = useState<string | null>(null);
   
   // Search & Filter State
@@ -147,10 +150,12 @@ export default function App() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  
+  // Modal States
+  const [isModalOpen, setIsModalOpen] = useState(false); // Import
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false); // AI
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false); // Edit
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Null = Batch Edit
+
   // AI Matching State
   const [schoolInput, setSchoolInput] = useState('');
   const [majorInput, setMajorInput] = useState('');
@@ -176,20 +181,38 @@ export default function App() {
     setSelectedProductIds(new Set());
   };
 
-  // --- API Integration Logic ---
+  // --- API Integration Logic (Hybrid Mode) ---
   
+  // Helper: Save to LocalStorage
+  const saveToLocal = (data: Product[]) => {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+  };
+
   // 1. Fetch Data
   const fetchProducts = async () => {
     setIsLoading(true);
     setDataError(null);
     try {
+      // 尝试连接 API
       const response = await fetch(API_BASE_URL);
-      if (!response.ok) throw new Error('Failed to fetch data');
+      if (!response.ok) throw new Error('API Offline');
       const data = await response.json();
+      
       setProducts(data);
+      saveToLocal(data); // Sync cloud to local backup
+      setConnectionStatus('cloud');
     } catch (err) {
-      console.error(err);
-      setDataError('无法连接到数据库 (D1)，请确认 Worker 配置已部署。');
+      console.warn("Cloud connection failed, falling back to local.", err);
+      setConnectionStatus('local');
+      
+      // Fallback: LocalStorage -> Initial Data
+      const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (localData) {
+        setProducts(JSON.parse(localData));
+      } else {
+        setProducts(INITIAL_DATA);
+        saveToLocal(INITIAL_DATA);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -202,36 +225,80 @@ export default function App() {
     }
   }, [user]);
 
-  // 2. Add Products
-  const handleAddProducts = async (newItems: Product[]) => {
-    // Optimistic UI update
-    const originalProducts = [...products];
-    setProducts(prev => [...newItems, ...prev]); // Show immediately
-    
-    try {
+  // Helper for syncing changes
+  const syncProductsToCloud = async (productsToSync: Product[]) => {
+     try {
       const response = await fetch(API_BASE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newItems)
+        body: JSON.stringify(productsToSync)
       });
-      
-      if (!response.ok) throw new Error('Upload failed');
-      
-      // Refresh to ensure sync with server format
-      await fetchProducts(); 
-      alert(`成功上传 ${newItems.length} 个产品到云端数据库`);
+      if (!response.ok) throw new Error('Cloud sync failed');
     } catch (err) {
-      console.error(err);
-      alert('上传失败，请重试。');
-      setProducts(originalProducts); // Rollback
+      console.warn("Sync failed, data saved locally.", err);
+      setDataError('云端同步失败，操作已在本地生效。');
     }
   };
 
-  // 3. Single Delete
+  // 2. Add Products
+  const handleAddProducts = async (newItems: Product[]) => {
+    const updatedProducts = [...newItems, ...products];
+    setProducts(updatedProducts);
+    saveToLocal(updatedProducts);
+    await syncProductsToCloud(newItems);
+  };
+
+  // 3. Edit Product (Single & Batch)
+  const handleEditSave = async (updates: Partial<Product>) => {
+    let updatedList = [...products];
+    let itemsToSync: Product[] = [];
+
+    if (editingProduct) {
+      // Single Edit
+      updatedList = updatedList.map(p => {
+         if (p.id === editingProduct.id) {
+           const newItem = { ...p, ...updates };
+           itemsToSync.push(newItem);
+           return newItem;
+         }
+         return p;
+      });
+    } else {
+      // Batch Edit
+      updatedList = updatedList.map(p => {
+        if (selectedProductIds.has(p.id)) {
+           // Only apply non-empty/non-undefined updates
+           const newItem = { ...p };
+           (Object.keys(updates) as Array<keyof Product>).forEach(key => {
+             const val = updates[key];
+             if (val !== undefined && val !== "" && val !== 0) {
+               // @ts-ignore
+               newItem[key] = val;
+             }
+           });
+           itemsToSync.push(newItem);
+           return newItem;
+        }
+        return p;
+      });
+      
+      // Clear selection after batch edit
+      setSelectedProductIds(new Set());
+      setIsSelectionMode(false);
+    }
+
+    setProducts(updatedList);
+    saveToLocal(updatedList);
+    await syncProductsToCloud(itemsToSync);
+  };
+
+  // 4. Single Delete
   const handleDeleteProduct = async (id: string) => {
     // Optimistic update
-    const originalProducts = [...products];
-    setProducts(prev => prev.filter(p => p.id !== id));
+    const updatedProducts = products.filter(p => p.id !== id);
+    setProducts(updatedProducts);
+    saveToLocal(updatedProducts);
+
     if (selectedProductIds.has(id)) {
       const newSet = new Set(selectedProductIds);
       newSet.delete(id);
@@ -244,20 +311,20 @@ export default function App() {
       });
       if (!response.ok) throw new Error('Delete failed');
     } catch (err) {
-      console.error(err);
-      alert('删除失败，数据已恢复');
-      setProducts(originalProducts); // Rollback
+      console.warn("Delete sync failed, processed locally.");
     }
   };
 
-  // 4. Batch Delete
+  // 5. Batch Delete
   const handleBatchDelete = async () => {
     if (confirm(`确定要删除选中的 ${selectedProductIds.size} 个项目吗？`)) {
       const idsToDelete = Array.from(selectedProductIds);
-      const originalProducts = [...products];
       
       // Optimistic Update
-      setProducts(prev => prev.filter(p => !selectedProductIds.has(p.id)));
+      const updatedProducts = products.filter(p => !selectedProductIds.has(p.id));
+      setProducts(updatedProducts);
+      saveToLocal(updatedProducts);
+
       setSelectedProductIds(new Set());
       setIsSelectionMode(false);
 
@@ -268,12 +335,10 @@ export default function App() {
           body: JSON.stringify({ ids: idsToDelete })
         });
         
-        if (!response.ok) throw new Error('Batch delete failed');
-        await fetchProducts(); // Sync
+        if (!response.ok) throw new Error('Batch delete sync failed');
       } catch (err) {
-        console.error(err);
-        alert('批量删除失败，请重试');
-        setProducts(originalProducts); // Rollback
+        console.warn("Batch delete sync failed, processed locally.");
+        setDataError('批量删除仅在本地生效，云端同步失败。');
       }
     }
   };
@@ -446,6 +511,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            <div className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+              connectionStatus === 'cloud' 
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+               {connectionStatus === 'cloud' ? <Cloud size={12} /> : <WifiOff size={12} />}
+               {connectionStatus === 'cloud' ? '云端已连接' : '本地离线模式'}
+            </div>
+
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-200">
                <div className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-amber-500' : 'bg-green-500'} animate-pulse`} />
                <span className="text-xs font-medium text-slate-600">{user.email}</span>
@@ -567,13 +641,13 @@ export default function App() {
           </div>
         </div>
 
-        {/* Data Error Banner */}
+        {/* Data Error Banner (Enhanced) */}
         {dataError && (
-          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-100 flex items-center gap-3 text-red-700">
-            <ShieldCheck size={20} />
+          <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-100 flex items-center gap-3 text-amber-800 animate-in slide-in-from-top-2">
+            <WifiOff size={20} />
             <div className="flex-1 text-sm font-medium">{dataError}</div>
-            <Button variant="secondary" size="sm" onClick={fetchProducts} className="bg-white">
-              <RefreshCw size={14} className="mr-2" /> 重试
+            <Button variant="secondary" size="sm" onClick={fetchProducts} className="bg-white/80 border-amber-200 text-amber-800 hover:bg-white">
+              <RefreshCw size={14} className="mr-2" /> 重试连接
             </Button>
           </div>
         )}
@@ -590,6 +664,21 @@ export default function App() {
              >
                {selectedProductIds.size === filteredProducts.length && filteredProducts.length > 0 ? '取消全选' : '全选当前页'}
              </button>
+             
+             {/* Batch Edit Button */}
+             <Button 
+               size="sm" 
+               variant="secondary" 
+               disabled={selectedProductIds.size === 0}
+               onClick={() => {
+                 setEditingProduct(null); // Set to null for batch mode
+                 setIsEditModalOpen(true);
+               }}
+               className="ml-2 rounded-full px-5 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+             >
+               <Pencil size={14} className="mr-2" /> 批量修改
+             </Button>
+
              <Button 
                size="sm" 
                variant="danger" 
@@ -623,7 +712,7 @@ export default function App() {
              <span className="text-sm font-semibold text-slate-700">共找到 {filteredProducts.length} 个项目</span>
              <span className="w-1 h-1 rounded-full bg-slate-300" />
              <span className="text-xs text-slate-500">
-               {isLoading ? '正在同步数据...' : '数据已更新'}
+               {isLoading ? '正在同步数据...' : '数据已就绪'}
              </span>
            </div>
            
@@ -648,6 +737,10 @@ export default function App() {
                 key={product.id} 
                 product={product} 
                 onDelete={isAdmin ? handleDeleteProduct : undefined}
+                onEdit={isAdmin ? (p) => {
+                  setEditingProduct(p);
+                  setIsEditModalOpen(true);
+                } : undefined}
                 selectionMode={isSelectionMode}
                 isSelected={selectedProductIds.has(product.id)}
                 onToggleSelect={handleToggleSelect}
@@ -670,12 +763,23 @@ export default function App() {
         </div>
       </main>
 
-      {/* Admin Modal */}
+      {/* Admin Modal (Import) */}
       {isAdmin && (
         <AdminModal 
           isOpen={isModalOpen} 
           onClose={() => setIsModalOpen(false)} 
           onSave={handleAddProducts} 
+        />
+      )}
+      
+      {/* Edit Modal (Single & Batch) */}
+      {isAdmin && (
+        <EditModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          product={editingProduct}
+          selectedCount={selectedProductIds.size}
+          onSave={handleEditSave}
         />
       )}
 
