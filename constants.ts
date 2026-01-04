@@ -1,3 +1,4 @@
+
 import { Product } from './types';
 
 // 修改为相对路径，自动指向同域名的 /api/products
@@ -45,6 +46,57 @@ export const MAJOR_MAP: Record<string, { industry: string; keywords: string[] }>
 
 // Simple keyword matching for school tier simulation
 export const TARGET_SCHOOL_KEYWORDS = ["harvard", "yale", "oxford", "cambridge", "mit", "stanford", "columbia", "清华", "北大", "复旦", "交大", "ucl", "ic", "nus"];
+
+// === INSTANT IMAGE LIBRARY ===
+// Pre-curated, high-quality Unsplash images (CORS enabled)
+// Optimized with width=1200 and quality=80
+const BASE_PARAMS = "?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80";
+
+export const STOCK_IMAGES: Record<string, string[]> = {
+  "金融": [
+    `https://images.unsplash.com/photo-1486406146926-c627a92ad1ab${BASE_PARAMS}`, // Skyscrapers looking up
+    `https://images.unsplash.com/photo-1556761175-5973dc0f32e7${BASE_PARAMS}`, // Meeting room handshake
+    `https://images.unsplash.com/photo-1611974765270-ca1258634369${BASE_PARAMS}`, // Stock tickers / Blur
+    `https://images.unsplash.com/photo-1507679799987-c73779587ccf${BASE_PARAMS}`, // Business man suit
+  ],
+  "券商投行": [
+    `https://images.unsplash.com/photo-1486406146926-c627a92ad1ab${BASE_PARAMS}`,
+    `https://images.unsplash.com/photo-1559526324-4b87b5e36e44${BASE_PARAMS}`, // Financial reports
+    `https://images.unsplash.com/photo-1526304640152-d4619684e484${BASE_PARAMS}`, // Money/Graph
+  ],
+  "互联网": [
+    `https://images.unsplash.com/photo-1497366216548-37526070297c${BASE_PARAMS}`, // Modern white office
+    `https://images.unsplash.com/photo-1531482615713-2afd69097998${BASE_PARAMS}`, // Coding screen
+    `https://images.unsplash.com/photo-1504384308090-c54be3855091${BASE_PARAMS}`, // Tech open plan
+    `https://images.unsplash.com/photo-1522071820081-009f0129c71c${BASE_PARAMS}`, // Team working
+  ],
+  "咨询": [
+    `https://images.unsplash.com/photo-1552664730-d307ca884978${BASE_PARAMS}`, // Team brainstorming
+    `https://images.unsplash.com/photo-1542744173-8e7e53415bb0${BASE_PARAMS}`, // Analytics screen
+    `https://images.unsplash.com/photo-1497215728101-856f4ea42174${BASE_PARAMS}`, // Bright office
+  ],
+  "default": [
+    `https://images.unsplash.com/photo-1497366811353-6870744d04b2${BASE_PARAMS}`, // General Office
+    `https://images.unsplash.com/photo-1497215728101-856f4ea42174${BASE_PARAMS}`, // Corporate
+    `https://images.unsplash.com/photo-1568992687947-868a62a9f521${BASE_PARAMS}`, // Creative space
+  ]
+};
+
+export const getRandomStockImage = (industry: string): string => {
+  let pool = STOCK_IMAGES["default"];
+  
+  // Try to find a specific pool
+  for (const key of Object.keys(STOCK_IMAGES)) {
+    if (industry && industry.includes(key)) {
+      pool = STOCK_IMAGES[key];
+      break;
+    }
+  }
+  
+  // Return random image from pool
+  const randomIndex = Math.floor(Math.random() * pool.length);
+  return pool[randomIndex];
+};
 
 // Initial seed data provided in requirements (Will only be used as fallback or initial seed if DB is empty)
 export const INITIAL_DATA: Product[] = [

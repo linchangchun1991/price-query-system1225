@@ -1,5 +1,5 @@
 {
-  "name": "PricePulse",
+  "name": "product-price-system",
   "description": "Internal high-performance product price search and management system.",
   "requestFramePermissions": []
 }

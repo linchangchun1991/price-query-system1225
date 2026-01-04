@@ -1,16 +1,16 @@
 import React from 'react';
 import { Product } from '../types';
-import { MapPin, Clock, Briefcase, Sparkles, User, MonitorSmartphone, Trash2, Check, Copy, Pencil } from 'lucide-react';
+import { Sparkles, Check, Pencil, Trash2, ArrowRight } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
   isRecommended?: boolean;
   onDelete?: (id: string) => void;
   onEdit?: (product: Product) => void;
-  // Batch Selection Props
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
+  onClick?: () => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ 
@@ -20,76 +20,75 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onEdit,
   selectionMode = false,
   isSelected = false,
-  onToggleSelect
+  onToggleSelect,
+  onClick
 }) => {
-  const [copied, setCopied] = React.useState(false);
-
-  // Format currency
+  
+  // Format currency with no decimals for cleaner look
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 0 }).format(price);
   };
 
-  // Calculate discount percentage
   const discount = Math.round(((product.price_standard - product.price_floor) / product.price_standard) * 100);
   const hasDiscount = discount > 0;
 
-  // Handle Copy
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const text = `【项目推荐】${product.name}\n行业：${product.industry}\n地点：${product.location}\n形式：${product.format}\n周期：${product.duration}\n优惠价：${product.price_floor}`;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleClick = (e: React.MouseEvent) => {
+    // Priority 1: Selection Mode
+    if (selectionMode && onToggleSelect) {
+      onToggleSelect(product.id);
+      return;
+    }
+    
+    // Priority 2: Standard Click (Open Detail)
+    // Fix: Removed the restriction (!onEdit && !onDelete) so admins can also view details
+    if (onClick) {
+      onClick();
+    }
   };
 
   return (
     <div 
-      onClick={() => selectionMode && onToggleSelect && onToggleSelect(product.id)}
+      onClick={handleClick}
       className={`
       relative group flex flex-col justify-between
       bg-white transition-all duration-300
       ${isRecommended 
-        ? 'ring-2 ring-indigo-500/20 shadow-xl shadow-indigo-500/5 z-10' 
-        : 'border border-slate-200 hover:border-indigo-300 hover:shadow-lg hover:shadow-slate-200/50'
+        ? 'ring-2 ring-indigo-500/20 shadow-2xl shadow-indigo-500/10' 
+        : 'border border-slate-100 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-1'
       }
       ${isSelected ? 'ring-2 ring-ivy-navy bg-slate-50' : ''}
-      rounded-xl overflow-hidden cursor-pointer
+      rounded-2xl overflow-hidden cursor-pointer h-full min-h-[320px]
     `}>
       
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-slate-100 to-transparent rounded-bl-full -z-0 opacity-50 group-hover:from-indigo-50 transition-colors" />
+
       {/* Batch Selection Overlay */}
       {selectionMode && (
-        <div className="absolute top-3 left-3 z-30">
-          <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-ivy-navy border-ivy-navy' : 'bg-white border-slate-300'}`}>
-            {isSelected && <Check size={12} className="text-white" />}
+        <div className="absolute top-4 left-4 z-30">
+          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-ivy-navy border-ivy-navy' : 'bg-white border-slate-200'}`}>
+            {isSelected && <Check size={14} className="text-white" />}
           </div>
         </div>
       )}
 
-      {/* Admin Actions (Delete & Edit) - Only show if NOT in selection mode */}
-      {!selectionMode && (
-        <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+      {/* Admin Actions - Improved Visibility & Hit Area */}
+      {!selectionMode && (onEdit || onDelete) && (
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-2 opacity-100 transition-all bg-white/90 backdrop-blur rounded-lg p-1.5 shadow-sm border border-slate-100">
            {onEdit && (
             <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(product);
-              }}
-              className="p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-ivy-navy hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 shadow-sm"
-              title="编辑产品"
+              onClick={(e) => { e.stopPropagation(); onEdit(product); }}
+              className="p-2 hover:bg-slate-100 rounded-md text-slate-400 hover:text-ivy-navy transition-colors"
+              title="编辑项目"
             >
               <Pencil size={16} />
             </button>
            )}
            {onDelete && (
             <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                if(confirm(`确定要删除产品 "${product.name}" 吗？`)) {
-                  onDelete(product.id);
-                }
-              }}
-              className="p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 shadow-sm"
-              title="删除产品"
+              onClick={(e) => { e.stopPropagation(); if(confirm('确认删除该项目?')) onDelete(product.id); }}
+              className="p-2 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 transition-colors"
+              title="删除项目"
             >
               <Trash2 size={16} />
             </button>
@@ -97,106 +96,67 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
       )}
 
-      {/* UX: Copy Button (Show only when not admin mode or specialized) */}
-      {!selectionMode && !onEdit && !onDelete && (
-        <button 
-          onClick={handleCopy}
-          className="absolute top-2 right-2 z-20 p-2 bg-white/90 backdrop-blur text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-transparent hover:border-indigo-100 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
-          title="复制项目信息"
-        >
-          {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
-        </button>
-      )}
-
-      {/* AI Recommendation Banner */}
+      {/* AI Recommended Badge */}
       {isRecommended && (
-        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-[10px] font-bold px-3 py-1 flex items-center gap-1.5">
-          <Sparkles size={10} className="fill-white/20" />
-          AI 智能精选
-        </div>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-violet-500" />
       )}
       
-      <div className="p-5 flex flex-col h-full">
-        {/* Header: Tags */}
-        <div className={`flex items-start justify-between mb-3 ${selectionMode ? 'pl-6' : ''} ${!selectionMode && (onEdit || onDelete) ? 'pr-16' : ''}`}>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`
-              text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-full border
-              ${product.type.includes("VIP") 
-                ? "bg-amber-50 text-amber-700 border-amber-100" 
-                : "bg-blue-50 text-blue-700 border-blue-100"}
-            `}>
-              {product.type}
-            </span>
-            <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-               {product.industry}
-            </span>
-          </div>
-          {hasDiscount && (
-             <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 shrink-0">
-               -{discount}%
+      <div className="p-6 md:p-7 flex flex-col h-full z-10 relative">
+        
+        {/* Top: Metadata Tags (Subtle) */}
+        <div className="flex items-center gap-2 mb-6">
+           <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400 border border-slate-100 px-2 py-0.5 rounded-md">
+             {product.type}
+           </span>
+           {isRecommended && (
+             <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+               <Sparkles size={10} /> AI 精选
              </span>
-          )}
+           )}
         </div>
         
-        {/* Title */}
-        <h3 className="text-[15px] font-bold text-slate-900 leading-snug mb-3 group-hover:text-indigo-700 transition-colors line-clamp-2 min-h-[42px]" title={product.name}>
-          {product.name}
-        </h3>
-        
-        {/* Key Features Highlighting (UX Improvement) */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <div className={`
-             flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border
-             ${product.location.includes("远程") 
-               ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
-               : "bg-orange-50 text-orange-700 border-orange-100"}
-          `}>
-             <MapPin size={12} />
-             {product.location}
+        {/* Main Content: HUGE Name & Role */}
+        <div className="mb-auto">
+          <h3 className="text-2xl font-black text-slate-900 leading-[1.1] mb-3 group-hover:text-ivy-navy transition-colors line-clamp-2" title={product.name}>
+            {product.name}
+          </h3>
+          
+          <div className="inline-block bg-slate-50 border border-slate-100 rounded-lg px-3 py-1.5 mb-2">
+            <span className="text-sm font-bold text-slate-700 block truncate max-w-[200px]" title={product.role}>
+               {product.role}
+            </span>
           </div>
           
-          <div className={`
-             flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border bg-slate-50 text-slate-600 border-slate-200
-          `}>
-             <MonitorSmartphone size={12} />
-             {product.format}
+          <div className="text-xs text-slate-400 font-medium mt-1 pl-1">
+             {product.location} · {product.duration}
           </div>
         </div>
 
-        {/* Detailed Specs */}
-        <div className="grid grid-cols-1 gap-y-1.5 text-xs text-slate-500 mb-4 px-1">
-           <div className="flex items-center gap-2">
-             <User size={12} className="text-slate-400 shrink-0" />
-             <span className="truncate" title={product.role}>岗位：<span className="text-slate-700">{product.role}</span></span>
-           </div>
-           <div className="flex items-center gap-2">
-             <Clock size={12} className="text-slate-400 shrink-0" />
-             <span className="truncate">周期：{product.duration}</span>
-           </div>
-           <div className="flex items-center gap-2">
-             <Briefcase size={12} className="text-slate-400 shrink-0" />
-             <span className="truncate">交付：{product.delivery_dept}</span>
+        {/* Bottom: Pricing (Maximized) */}
+        <div className="mt-8 pt-6 border-t border-slate-50 group-hover:border-slate-100 transition-colors">
+           <div className="flex items-end justify-between">
+              <div>
+                 {hasDiscount && (
+                   <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-slate-400 line-through decoration-slate-300">
+                        {formatPrice(product.price_standard)}
+                      </span>
+                      <span className="bg-red-50 text-red-600 text-[10px] font-bold px-1.5 rounded">
+                        -{discount}%
+                      </span>
+                   </div>
+                 )}
+                 <div className="text-3xl font-black text-ivy-red tracking-tight leading-none">
+                   {formatPrice(product.price_floor)}
+                 </div>
+              </div>
+              
+              <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-ivy-navy group-hover:text-white transition-all duration-300 shadow-sm">
+                 <ArrowRight size={18} />
+              </div>
            </div>
         </div>
 
-        {/* Pricing Footer */}
-        <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between">
-           <div className="flex flex-col">
-             <span className="text-[10px] text-slate-400">官方指导价</span>
-             <span className="text-xs text-slate-400 line-through decoration-slate-300">
-                {formatPrice(product.price_standard)}
-             </span>
-           </div>
-           <div className="text-right">
-             <div className="flex items-center justify-end gap-1 text-[10px] text-ivy-red font-medium mb-0.5">
-                <span>优惠后</span>
-             </div>
-             <div className="text-lg font-bold text-slate-900 font-mono tracking-tight leading-none group-hover:text-ivy-red transition-colors">
-               {formatPrice(product.price_floor)}
-             </div>
-           </div>
-        </div>
       </div>
     </div>
   );

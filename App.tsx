@@ -5,6 +5,7 @@ import { ProductCard } from './components/ProductCard';
 import { Button } from './components/Button';
 import { AdminModal } from './components/AdminModal';
 import { EditModal } from './components/EditModal';
+import { ProductDetailModal } from './components/ProductDetailModal';
 import { 
   Search, ShieldCheck, Sparkles, LogOut, Plus, Globe2, UserCircle, 
   XCircle, GraduationCap, ChevronDown, MapPin, Briefcase, 
@@ -152,9 +153,13 @@ export default function App() {
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false); // Import
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false); // AI
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false); // AI Match
   const [isEditModalOpen, setIsEditModalOpen] = useState(false); // Edit
   const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Null = Batch Edit
+  
+  // New Detail Modal State
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // AI Matching State
   const [schoolInput, setSchoolInput] = useState('');
@@ -485,6 +490,12 @@ export default function App() {
     }
   };
 
+  // Handle Card Click
+  const handleProductClick = (product: Product) => {
+      setViewingProduct(product);
+      setIsDetailModalOpen(true);
+  };
+
   if (!user) return <LoginView onLogin={handleLogin} error={authError} />;
 
   const activeFiltersCount = [selectedIndustry, selectedLocation, selectedDept, query, aiReason].filter(Boolean).length;
@@ -725,7 +736,7 @@ export default function App() {
         </div>
 
         {/* Product Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5 pb-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-20">
           {isLoading && products.length === 0 ? (
              // Loading Skeleton
              Array.from({ length: 8 }).map((_, i) => (
@@ -744,6 +755,7 @@ export default function App() {
                 selectionMode={isSelectionMode}
                 isSelected={selectedProductIds.has(product.id)}
                 onToggleSelect={handleToggleSelect}
+                onClick={() => handleProductClick(product)}
               />
             ))
           ) : (
@@ -782,10 +794,17 @@ export default function App() {
           onSave={handleEditSave}
         />
       )}
+      
+      {/* Product Detail Modal (Poster) */}
+      <ProductDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        product={viewingProduct}
+      />
 
-      {/* AI Match Modal (保持不变) */}
+      {/* AI Match Modal */}
       {isAiModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
              <div className="bg-gradient-to-r from-ivy-navy to-slate-900 p-6 flex justify-between items-start">
                 <div className="text-white">
