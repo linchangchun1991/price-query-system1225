@@ -16,22 +16,29 @@ export default defineConfig(({ mode }) => {
         transformMixedEsModules: true,
       },
       rollupOptions: {
-        // Removed manualChunks for 'ai' to let Vite handle chunking automatically
-        // This prevents build failure if resolution is tricky
+        // CRITICAL FIX: Tell Vite NOT to bundle this package.
+        // It will be resolved at runtime via the importmap in index.html.
+        external: ['@google/genai'],
         output: {
           manualChunks: {
             vendor: ['react', 'react-dom', 'lucide-react']
+          },
+          // Optional: Global variable fallback if not using ESM (not strictly needed for esm.sh but good practice)
+          globals: {
+            '@google/genai': 'GoogleGenAI'
           }
         }
       }
     },
-    // Polyfill process.env for GenAI SDK
+    // Polyfill process.env for the application code
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
       'process.env': {} 
     },
     optimizeDeps: {
-      include: ['@google/genai', 'react', 'react-dom', 'html2canvas']
+      // Exclude genai from pre-bundling since we are loading it from CDN
+      exclude: ['@google/genai'],
+      include: ['react', 'react-dom', 'html2canvas']
     }
   };
 });
