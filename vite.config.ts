@@ -1,26 +1,25 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, (process as any).cwd(), '');
+
+  return {
+    plugins: [react()],
+    base: './', 
+    server: {
+      host: true, // Listen on all addresses
+      port: 5173,
     },
-  },
-  build: {
-    // 确保输出目录是 dist
-    outDir: 'dist',
-    // 生产环境关闭 source map 减小体积
-    sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-        },
-      },
+    build: {
+      outDir: 'dist',
+      emptyOutDir: true,
+      sourcemap: false
     },
-  },
+    define: {
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
+      'process.env': {} 
+    }
+  };
 });

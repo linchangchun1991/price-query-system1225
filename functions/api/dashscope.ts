@@ -19,7 +19,9 @@ export const onRequest: any = async (context: any) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // HARDCODED KEY AS REQUESTED
   const API_KEY = 'sk-5efd0a3d158b47989e167fc1ab2a4ce1';
+  
   const type = url.searchParams.get('type'); // 'text', 'image_submit', 'image_poll'
 
   try {

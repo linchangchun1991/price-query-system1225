@@ -1,6 +1,6 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { Product } from '../types';
-import { GoogleGenAI } from "@google/genai";
 import { X, MapPin, Briefcase, Loader2, Quote, Copy, Check, Download, RefreshCw, ImagePlus } from 'lucide-react';
 import { Button } from './Button';
 import html2canvas from 'html2canvas';
@@ -55,14 +55,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ isOpen, 
   const generateDescription = async (p: Product) => {
     setTextLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
       const isPTA = p.type.includes('PTA') || p.name.includes('PTA');
       const deliverablesText = isPTA 
         ? "项目证明、留学/求职背调、申学链接5封"
         : "实习证明、留学生/求职背调，申学链接5封";
 
-      // Use 'gemini-flash-lite-latest' for fastest possible text gen
       const textPrompt = `Role: ${p.role}. Industry: ${p.industry}.
       Write a JD in Chinese. Plain text.
       【核心职责】
@@ -70,19 +67,36 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ isOpen, 
       【能力提升】
       - 2 professional bullet points.`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-flash-lite-latest',
-        contents: textPrompt
+      // Call Cloudflare Function (proxies to Alibaba Cloud DashScope)
+      const response = await fetch('/api/dashscope?type=text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'qwen-turbo',
+          input: {
+            messages: [
+              { role: 'system', content: 'You are a professional HR assistant.' },
+              { role: 'user', content: textPrompt }
+            ]
+          }
+        })
       });
+
+      if (!response.ok) {
+        throw new Error('AI API Error');
+      }
+
+      const data = await response.json();
+      // Parse Qwen response structure
+      let generatedText = data?.output?.text || "";
       
-      let generatedText = response.text || "";
       generatedText = generatedText.replace(/\*\*/g, '').replace(/##/g, '').trim();
       const finalText = `${generatedText}\n\n【核心交付物】\n- ${deliverablesText}`;
       
       setAiDescription(finalText);
     } catch (error) {
-      console.error("Gemini Text Gen failed:", error);
-      setAiDescription("内容生成超时，请手动编辑。");
+      console.error("Text Gen failed:", error);
+      setAiDescription("网络请求超时或服务暂不可用，请尝试手动编辑。");
     } finally {
       setTextLoading(false);
     }
