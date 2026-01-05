@@ -10,7 +10,7 @@ import {
   Search, ShieldCheck, Sparkles, LogOut, Plus, Globe2, UserCircle, 
   XCircle, GraduationCap, ChevronDown, MapPin, Briefcase, 
   LayoutTemplate, SlidersHorizontal, BarChart3, Settings,
-  CheckSquare, Trash2, Tag, Loader2, RefreshCw, WifiOff, Cloud, School, Pencil
+  CheckSquare, Trash2, Tag, Loader2, RefreshCw, WifiOff, Cloud, School, Pencil, Copy, FileSpreadsheet
 } from 'lucide-react';
 
 // Admin Email Constant
@@ -253,7 +253,40 @@ export default function App() {
     await syncProductsToCloud(newItems);
   };
 
-  // 3. Edit Product (Single & Batch)
+  // 3. Export Products to Clipboard
+  const handleExportData = () => {
+    if (products.length === 0) {
+      alert("当前没有数据可导出。");
+      return;
+    }
+
+    const headers = ['ID', '类型', '名称', '行业', '岗位', '地点', '形式', '时长', '标准价', '优惠价', '部门'];
+    const rows = products.map(p => [
+      p.id,
+      p.type,
+      p.name,
+      p.industry,
+      p.role,
+      p.location,
+      p.format,
+      p.duration,
+      p.price_standard,
+      p.price_floor,
+      p.delivery_dept
+    ].join('\t'));
+    
+    // Add BOM for Excel UTF-8 compatibility if saved as file, but for clipboard just text is fine.
+    const tsvContent = [headers.join('\t'), ...rows].join('\n');
+    
+    navigator.clipboard.writeText(tsvContent).then(() => {
+      alert(`已成功复制 ${products.length} 条数据到剪贴板！\n\n1. 打开 Excel\n2. 粘贴 (Ctrl+V)\n3. 修改数据 (保留 ID 可更新现有项目)\n4. 复制回本系统进行导入`);
+    }).catch(err => {
+      console.error('Copy failed', err);
+      alert('复制失败，请手动尝试。');
+    });
+  };
+
+  // 4. Edit Product (Single & Batch)
   const handleEditSave = async (updates: Partial<Product>) => {
     let updatedList = [...products];
     let itemsToSync: Product[] = [];
@@ -297,7 +330,7 @@ export default function App() {
     await syncProductsToCloud(itemsToSync);
   };
 
-  // 4. Single Delete
+  // 5. Single Delete
   const handleDeleteProduct = async (id: string) => {
     // Optimistic update
     const updatedProducts = products.filter(p => p.id !== id);
@@ -320,7 +353,7 @@ export default function App() {
     }
   };
 
-  // 5. Batch Delete
+  // 6. Batch Delete
   const handleBatchDelete = async () => {
     if (confirm(`确定要删除选中的 ${selectedProductIds.size} 个项目吗？`)) {
       const idsToDelete = Array.from(selectedProductIds);
@@ -570,6 +603,12 @@ export default function App() {
                    >
                      <CheckSquare size={18} className="mr-2" /> {isSelectionMode ? '退出批量管理' : '批量管理'}
                    </Button>
+
+                   {/* Export / Copy Data Button */}
+                   <Button onClick={handleExportData} variant="secondary" className="pl-3 pr-4 shadow-sm border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                     <FileSpreadsheet size={18} className="mr-1" /> 复制数据(Excel)
+                   </Button>
+
                    <Button onClick={() => setIsModalOpen(true)} className="pl-3 pr-4 shadow-lg shadow-ivy-navy/20">
                      <Plus size={18} className="mr-1" /> 导入数据
                    </Button>

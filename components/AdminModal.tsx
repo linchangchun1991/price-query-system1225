@@ -28,6 +28,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onSave 
         // Excel empty cells come as consecutive tabs
         const cols = row.split('\t').map(c => c.trim());
         
+        // Intelligent Header Skip
+        // If it's the first row and looks like a header, skip it
+        if (index === 0 && (cols.includes('ID') || cols.includes('名称') || cols.includes('name'))) {
+           return;
+        }
+
         // Validation: Expecting at least 11 columns
         if (cols.length < 11) {
            console.warn(`Row ${index} skipped: insufficient columns`, cols);
@@ -92,7 +98,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, onSave 
             <div className="space-y-6">
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <label className="block text-sm font-semibold text-slate-700 mb-3">
-                  请在 Excel 中选中以下 11 列数据行 (不含表头) 并直接复制：
+                  请在 Excel 中选中以下 11 列数据行 (可包含表头) 并直接复制：
                 </label>
                 <div className="overflow-x-auto pb-2">
                   <div className="flex gap-2 min-w-max">
