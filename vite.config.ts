@@ -2,9 +2,8 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Use process.cwd() to get the root directory.
-  // Fix: Cast process to any to avoid "Property 'cwd' does not exist on type 'Process'"
+  // 1. 安全地加载环境变量
+  // 使用 (process as any).cwd() 绕过 TS 类型检查，确保在 Node 环境下正常运行
   const env = loadEnv(mode, (process as any).cwd(), '');
 
   return {
@@ -14,19 +13,26 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       emptyOutDir: true,
       sourcemap: false,
+      commonjsOptions: {
+        transformMixedEsModules: true, // 关键：允许混合模块转换，修复某些库的兼容性
+      },
       rollupOptions: {
-        // Ensure we do NOT treat @google/genai as external, we want it bundled.
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'lucide-react'],
+            ai: ['@google/genai']
+          }
+        }
       }
     },
-    // Polyfill process.env
+    // 2. 注入全局变量，Google GenAI SDK 需要读取 process.env.API_KEY
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      // Prevent crash if code accesses process.env elsewhere
-      'process.env': {} 
+      'process.env': {} // 防止其他库访问 process.env 报错
     },
-    // Explicitly include the SDK in optimization to handle ESM/CJS interop
+    // 3. 强制预构建依赖，解决 ESM/CJS 互操作问题
     optimizeDeps: {
-      include: ['@google/genai', 'react', 'react-dom']
+      include: ['@google/genai', 'react', 'react-dom', 'html2canvas']
     }
   };
 });
