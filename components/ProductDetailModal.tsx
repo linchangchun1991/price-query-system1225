@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Product } from '../types';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from "@google/generative-ai";
 import { X, MapPin, Briefcase, Loader2, Quote, Copy, Check, Download, RefreshCw, ImagePlus } from 'lucide-react';
 import { Button } from './Button';
 import html2canvas from 'html2canvas';
