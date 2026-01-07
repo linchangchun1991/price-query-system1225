@@ -88,9 +88,10 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   
-  // Data State - DEFAULT TO INITIAL DATA IMMEDIATELY
+  // Data State
   const [products, setProducts] = useState<Product[]>(INITIAL_DATA);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Filters
   const [query, setQuery] = useState('');
@@ -120,75 +121,154 @@ export default function App() {
     if (email.trim() === ADMIN_EMAIL || email.endsWith(ALLOWED_DOMAIN)) {
       setUser({ email, role: email === ADMIN_EMAIL ? 'admin' : 'viewer' });
       setAuthError(null);
-      // Ensure data is loaded
-      loadData();
     } else {
       setAuthError('请使用公司邮箱');
     }
   };
 
-  // --- Data Logic ---
+  // --- Data Logic (Synchronized) ---
+  
+  // 1. Load Data: Local Cache -> Then API (Source of Truth)
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user]);
+
   const loadData = async () => {
-    // 1. Try LocalStorage
+    setIsLoading(true);
+    
+    // Step 1: Instant load from LocalStorage (Cache)
     const local = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (local) {
         try {
             const parsed = JSON.parse(local);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 setProducts(parsed);
-                return;
             }
         } catch(e) {}
     }
 
-    // 2. Try API (Background)
+    // Step 2: Fetch from Network (Source of Truth)
     try {
         const res = await fetch(API_BASE_URL);
         if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
+                // Server data overrides local data
                 setProducts(data);
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+            } else if (data.length === 0 && (!local || JSON.parse(local).length === 0)) {
+                // If server is empty and local is empty, use initial
+                // Only on very first init
             }
         }
     } catch (e) {
-        console.warn("API offline, using mock data");
+        console.warn("API offline, using cached data");
+    } finally {
+        setIsLoading(false);
     }
-    
-    // 3. Fallback to constant is already handled by useState(INITIAL_DATA)
   };
 
-  const saveData = (newData: Product[]) => {
+  // Helper: Persist to LocalStorage
+  const persistLocal = (newData: Product[]) => {
     setProducts(newData);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newData));
   };
 
-  const handleAddProducts = (newItems: Product[]) => {
-    saveData([...newItems, ...products]);
+  // 2. Add: Update Local -> Push to API
+  const handleAddProducts = async (newItems: Product[]) => {
+    // Optimistic Update
+    const newList = [...newItems, ...products];
+    persistLocal(newList);
+    setIsSyncing(true);
+
+    try {
+      await fetch(API_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItems)
+      });
+    } catch (e) {
+      console.error("Failed to sync add", e);
+      alert("网络同步失败，数据已保存到本地");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  const handleEditSave = (updates: Partial<Product>) => {
-    let updated = [...products];
+  // 3. Edit: Update Local -> Push to API (Upsert)
+  const handleEditSave = async (updates: Partial<Product>) => {
+    let updatedProducts = [...products];
+    let itemsToSync: Product[] = [];
+
     if (editingProduct) {
-        updated = updated.map(p => p.id === editingProduct.id ? { ...p, ...updates } : p);
+        // Single Edit
+        const newItem = { ...editingProduct, ...updates };
+        itemsToSync = [newItem];
+        updatedProducts = updatedProducts.map(p => p.id === newItem.id ? newItem : p);
     } else {
-        updated = updated.map(p => selectedProductIds.has(p.id) ? { ...p, ...updates } : p);
+        // Batch Edit
+        itemsToSync = updatedProducts
+            .filter(p => selectedProductIds.has(p.id))
+            .map(p => ({ ...p, ...updates }));
+
+        updatedProducts = updatedProducts.map(p => {
+            if (selectedProductIds.has(p.id)) {
+                return { ...p, ...updates };
+            }
+            return p;
+        });
         setIsSelectionMode(false);
         setSelectedProductIds(new Set());
     }
-    saveData(updated);
-  };
 
-  const handleDelete = (id: string) => {
-    saveData(products.filter(p => p.id !== id));
-  };
+    // Optimistic Update
+    persistLocal(updatedProducts);
+    setIsSyncing(true);
 
-  const handleBatchDelete = () => {
-    if (confirm('确认删除选中项目?')) {
-        saveData(products.filter(p => !selectedProductIds.has(p.id)));
-        setIsSelectionMode(false);
-        setSelectedProductIds(new Set());
+    try {
+      // API Upsert
+      await fetch(API_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(itemsToSync)
+      });
+    } catch (e) {
+      console.error("Failed to sync edit", e);
+      alert("网络同步失败，数据已保存到本地");
+    } finally {
+      setIsSyncing(false);
     }
+  };
+
+  // 4. Delete: Update Local -> Call DELETE API
+  const handleDelete = async (id: string) => {
+    persistLocal(products.filter(p => p.id !== id));
+    
+    // Sync
+    try {
+        await fetch(`${API_BASE_URL}?id=${id}`, { method: 'DELETE' });
+    } catch(e) { console.error(e); }
+  };
+
+  // 5. Batch Delete
+  const handleBatchDelete = async () => {
+    if (!confirm('确认删除选中项目?')) return;
+    
+    const idsToDelete = Array.from(selectedProductIds);
+    persistLocal(products.filter(p => !selectedProductIds.has(p.id)));
+    setIsSelectionMode(false);
+    setSelectedProductIds(new Set());
+
+    // Sync
+    try {
+      await fetch(API_BASE_URL, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToDelete })
+      });
+    } catch(e) { console.error(e); }
   };
 
   // --- Filter Logic ---
@@ -209,7 +289,6 @@ export default function App() {
 
   // --- AI Logic ---
   const handleAiMatch = () => {
-    // Simple rule-based match for demo
     setQuery(majorInput || schoolInput);
     if (majorInput) {
         for (const [k, v] of Object.entries(MAJOR_MAP)) {
@@ -229,6 +308,8 @@ export default function App() {
         <div className="flex items-center gap-2 font-bold text-lg text-slate-800">
             <Globe className="text-blue-600" size={20} />
             <span>全球背景提升资源匹配中心</span>
+            {isLoading && <Loader2 size={16} className="animate-spin text-slate-400 ml-2" />}
+            {isSyncing && <RefreshCw size={16} className="animate-spin text-green-500 ml-2" />}
         </div>
         <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-500">{user.email}</span>
@@ -243,7 +324,10 @@ export default function App() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div>
                 <h1 className="text-2xl font-bold text-slate-900">资源列表</h1>
-                <p className="text-slate-500 text-sm">共 {filteredProducts.length} 个项目</p>
+                <p className="text-slate-500 text-sm">
+                    共 {filteredProducts.length} 个项目 
+                    {products.length === 0 && !isLoading && " (数据库为空)"}
+                </p>
             </div>
             
             <div className="flex gap-2">
@@ -341,7 +425,7 @@ export default function App() {
                         newSet.has(id) ? newSet.delete(id) : newSet.add(id);
                         setSelectedProductIds(newSet);
                     }}
-                    onDelete={user.role === 'admin' ? handleDelete : undefined}
+                    onDelete={user.role === 'admin' ? () => handleDelete(p.id) : undefined}
                     onEdit={user.role === 'admin' ? (prod) => { setEditingProduct(prod); setIsEditModalOpen(true); } : undefined}
                     onClick={() => { setViewingProduct(p); setIsDetailModalOpen(true); }}
                 />
@@ -352,7 +436,7 @@ export default function App() {
                     <div className="flex justify-center mb-4"><SlidersHorizontal size={48} className="opacity-20" /></div>
                     <p>暂无数据，请尝试调整筛选或导入数据</p>
                     <div className="mt-4">
-                        <Button variant="secondary" onClick={() => setProducts(INITIAL_DATA)}>
+                        <Button variant="secondary" onClick={() => persistLocal(INITIAL_DATA)}>
                             <RefreshCw size={14} className="mr-2" /> 恢复演示数据
                         </Button>
                     </div>
