@@ -1,3 +1,4 @@
+
 // Cloudflare Pages Functions - API Handler
 // 路径: /api/products
 
@@ -19,12 +20,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
 
-  // 通用响应头 (CORS)
+  // 通用响应头 (CORS + No Cache)
+  // 关键修改：添加 Cache-Control 禁止任何形式的缓存，确保价格实时同步
   const corsHeaders = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
   };
 
   // 处理 OPTIONS 预检请求

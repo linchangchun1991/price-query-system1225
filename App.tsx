@@ -151,7 +151,8 @@ export default function App() {
 
     // Step 2: Fetch from Network (Source of Truth)
     try {
-        const res = await fetch(API_BASE_URL);
+        // Cache Busting: Add timestamp to prevent browser from serving stale data
+        const res = await fetch(`${API_BASE_URL}?t=${new Date().getTime()}`);
         if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
